@@ -14,10 +14,10 @@ data = {
     }
 }
 
-with open(filename, 'w') as file_to_open:
+with open(filename, 'w', encoding='utf-8') as file_to_open:
     yaml.dump(data, file_to_open, default_flow_style=False, allow_unicode=True)
 
-with open(filename) as file_to_read:
+with open(filename, 'r', encoding='utf-8') as file_to_read:
     data_file = file_to_read.read()
 
 print(data_file)

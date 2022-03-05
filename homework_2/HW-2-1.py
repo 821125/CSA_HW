@@ -1,4 +1,7 @@
 import re
+import os
+import chardet
+import csv
 
 os_prod_list = []
 os_name_list = []
@@ -11,11 +14,19 @@ main_data = [[
     'Тип системы'
 ]]
 
+
+def detect_encoding(file_name):
+    with open(file_name, 'rb') as file:
+        data_bytes = file.read()
+        encoding = chardet.detect(data_bytes)
+        return encoding['encoding']
+
+
 def get_data():
     data = []
     dirctory_items = list(filter(lambda x: '.txt' in x, os.listdir()))
     for filename in dirctory_items:
-        with open(filename) as file:
+        with open(filename, 'r', encoding=detect_encoding(filename)) as file:
             for line in file.readlines():
                 data += re.findall(r'^(\w[^:]+).*:\s+([^:\n]+)\s*$', line)
     for item in data:
@@ -30,7 +41,7 @@ def get_data():
 def write_to_csv(file_path):
     data = get_data()
     with open(file_path, 'w', encoding='utf-8', newline='') as csv_file:
-        writer = csv.writer(csv_file, delimiter=',', quoting=csv.QUOTE_NONNUMERIC)
+        writer = csv.writer(csv_file)
         for line in data:
             writer.writerow(line)
     print(f'Data was write to {file_path}')
