@@ -1,4 +1,4 @@
-'''Client'''
+"""Client"""
 
 import sys
 import json
@@ -10,11 +10,11 @@ from common.utils import get_message, send_message
 
 
 def create_presence(account_name='Guest'):
-    '''
+    """
     The function generates a client presence request
     :param account_name:
     :return:
-    '''
+    """
     out = {
         ACTION: PRESENCE,
         TIME: time.time(),
@@ -26,11 +26,11 @@ def create_presence(account_name='Guest'):
 
 
 def process_ans(message):
-    '''
+    """
     The function parses the server response
     :param message:
     :return:
-    '''
+    """
     if RESPONSE in message:
         if message[RESPONSE] == 200:
             return '200 : OK'
@@ -39,7 +39,7 @@ def process_ans(message):
 
 
 def main():
-    '''Loading command line options'''
+    """Loading command line options"""
     try:
         server_address = sys.argv[1]
         server_port = int(sys.argv[2])

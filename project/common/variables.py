@@ -1,4 +1,4 @@
-'''Constants'''
+"""Constants"""
 
 # Default port for network communication
 DEFAULT_PORT = 7777

@@ -1,4 +1,4 @@
-'''Server'''
+"""Server"""
 
 import socket
 import sys
@@ -9,14 +9,14 @@ from common.utils import get_message, send_message
 
 
 def process_client_message(message):
-    '''
+    """
     Message handler from clients, takes a dictionary -
     a message from the clint, checks the correctness,
     returns a response dictionary for the client
 
     :param message:
     :return:
-    '''
+    """
     if ACTION in message and message[ACTION] == PRESENCE and TIME in message \
             and USER in message and message[USER][ACCOUNT_NAME] == 'Guest':
         return {RESPONSE: 200}
@@ -27,12 +27,12 @@ def process_client_message(message):
 
 
 def main():
-    '''
+    """
     Loading command line parameters, if there are no parameters, then set the default values.
     First we process the port:
     server.py -p 8888 -a 127.0.0.1
     :return:
-    '''
+    """
 
     try:
         if '-p' in sys.argv:
