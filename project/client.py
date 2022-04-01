@@ -7,14 +7,17 @@ import time
 import argparse
 import logging
 import logs.config_client_log
-from errors import ReqFieldMissingError
-from common.variables import ACTION, PRESENCE, TIME, USER, ACCOUNT_NAME, \
-    RESPONSE, DEFAULT_PORT, ERROR, DEFAULT_IP_ADDRESS
+from common.variables import ACTION, TIME, USER, ACCOUNT_NAME, RESPONSE, \
+    DEFAULT_IP_ADDRESS, DEFAULT_PORT, ERROR, PRESENCE
 from common.utils import get_message, send_message
+from errors import ReqFieldMissingError
+from decos import Log
 
+# Initial client logger
 CLIENT_LOGGER = logging.getLogger('client')
 
 
+@Log(CLIENT_LOGGER)
 def create_presence(account_name='Guest'):
     """
     The function generates a client presence request
@@ -28,10 +31,11 @@ def create_presence(account_name='Guest'):
             ACCOUNT_NAME: account_name
         }
     }
-    CLIENT_LOGGER.debug(f'{PRESENCE} - {account_name}')
+    CLIENT_LOGGER.debug(f'{PRESENCE} message for user {account_name}')
     return out
 
 
+@Log(CLIENT_LOGGER)
 def process_ans(message):
     """
     The function parses the server response
@@ -45,6 +49,7 @@ def process_ans(message):
     raise ReqFieldMissingError(RESPONSE)
 
 
+@Log(CLIENT_LOGGER)
 def create_arg_parser():
     """
     Create a command line argument parser
@@ -72,7 +77,6 @@ def main():
     CLIENT_LOGGER.info(f'Client started with server address: {server_address}, port: {server_port}')
 
     # Initial socket
-
     try:
         transport = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         transport.connect((server_address, server_port))

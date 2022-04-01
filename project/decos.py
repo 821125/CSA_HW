@@ -16,7 +16,6 @@ class LogFilter(logging.Filter):
     """
     Filter allow writing only logs with additional condition.
     """
-
     def filter(self, record):
         return "fUnction" in record.getMessage()
 
@@ -27,7 +26,6 @@ class Log:
         LOGGER = logging.getLogger('client')
 
         """
-
         self.logger = logger
 
     def __call__(self, func):
