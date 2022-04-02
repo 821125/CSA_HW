@@ -7,6 +7,11 @@ class IncorrectDataReceivedError(Exception):
         return 'Bad massages from remote PC.'
 
 
+class ServerError(Exception):
+    """Exception -  server error"""
+    def __init__(self, text):
+        self.text = text
+
 class NonDictInputError(Exception):
     """Exception - argument not a dictionary"""
     def __str__(self):
