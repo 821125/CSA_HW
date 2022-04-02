@@ -1,5 +1,7 @@
 """Constants"""
 
+import logging
+
 # Default port for network communication
 DEFAULT_PORT = 7777
 # Default IP address for client connection
@@ -10,6 +12,8 @@ MAX_CONNECTIONS = 5
 MAX_PACKAGE_LENGTH = 1024
 # Project Encoding
 ENCODING = 'utf-8'
+# Current logging level
+LOGGING_LEVEL = logging.DEBUG
 
 # Protocol JIM main keys:
 ACTION = 'action'
@@ -21,4 +25,3 @@ ACCOUNT_NAME = 'account_name'
 PRESENCE = 'presence'
 RESPONSE = 'response'
 ERROR = 'error'
-RESPONDEFAULT_IP_ADDRESSSE = 'respondefault_ip_addressse'
