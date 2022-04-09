@@ -4,10 +4,11 @@ import socket
 import argparse
 import select
 import logs.config_server_log
-from errors import IncorrectDataReceivedError
 from common.variables import *
 from common.utils import *
 from decos import Log
+from descriptors import Port
+from metaclasses import ServerMaker
 
 # Server logging initialization.
 SERVER_LOGGER = logging.getLogger('server_dist')
@@ -26,7 +27,9 @@ def arg_parser():
 
 
 # Main server class
-class Server:
+class Server(metaclasses=ServerMaker):
+    port = Port()
+
     def __init__(self, listen_address, listen_port):
         # connection param
         self.addr = listen_address

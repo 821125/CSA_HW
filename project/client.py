@@ -1,24 +1,22 @@
 """Client"""
 
-import sys
-import json
 import socket
 import time
 import argparse
-import logging
 import threading
 import logs.config_client_log
 from common.variables import *
-from common.utils import get_message, send_message
+from common.utils import *
 from errors import IncorrectDataReceivedError, ReqFieldMissingError, ServerError
 from decos import Log
+from metaclasses import ClientMaker
 
 # Initial clients logger
 CLIENT_LOGGER = logging.getLogger('client_dist')
 
 
 # Initial client logger class
-class ClientSender(threading.Thread):
+class ClientSender(threading.Thread, metaclass=ClientMaker):
     def __init__(self, account_name, sock):
         self.account_name = account_name
         self.sock = sock
