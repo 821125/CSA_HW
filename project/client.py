@@ -8,115 +8,112 @@ import argparse
 import logging
 import threading
 import logs.config_client_log
-from common.variables import DEFAULT_PORT, DEFAULT_IP_ADDRESS, \
-    ACTION, TIME, USER, ACCOUNT_NAME, SENDER, PRESENCE, RESPONSE, \
-    ERROR, MESSAGE, MESSAGE_TEXT, DESTINATION, EXIT
+from common.variables import *
 from common.utils import get_message, send_message
 from errors import IncorrectDataReceivedError, ReqFieldMissingError, ServerError
 from decos import Log
 
-# Initial client logger
-CLIENT_LOGGER = logging.getLogger('client')
+# Initial clients logger
+CLIENT_LOGGER = logging.getLogger('client_dist')
 
 
-@Log(CLIENT_LOGGER)
-def create_exit_message(account_name):
-    """
-    The function create dictionary with entry message
-    :param account_name:
-    :return:
-    """
-    return {
-        ACTION: EXIT,
-        TIME: time.time(),
-        ACCOUNT_NAME: account_name
-    }
+# Initial client logger class
+class ClientSender(threading.Thread):
+    def __init__(self, account_name, sock):
+        self.account_name = account_name
+        self.sock = sock
+        super().__init__()
 
+    # Dictionary creation function with output message
+    def create_exit_message(self):
+        return {
+            ACTION: EXIT,
+            TIME: time.time(),
+            ACCOUNT_NAME: self.account_name
+        }
 
-@Log(CLIENT_LOGGER)
-def message_from_server(sock, my_username):
-    """
-    The handlers function for messages from server
-    :param sock:
-    :param my_username:
-    """
-    while True:
+    # Data sender function.
+    # The function receives as input sender and message and send data to server.
+    def create_message(self):
+        to = input('Input sender for message: ')
+        message = input('Input message: ')
+        message_dict = {
+            ACTION: MESSAGE,
+            SENDER: self.account_name,
+            DESTINATION: to,
+            TIME: time.time(),
+            MESSAGE_TEXT: message
+        }
+        CLIENT_LOGGER.debug(f'Messages dictionary has formed: {message_dict}')
         try:
-            message = get_message(sock)
-            if ACTION in message and message[ACTION] == MESSAGE and \
-                    SENDER in message and DESTINATION in message \
-                    and MESSAGE_TEXT in message and MESSAGE[DESTINATION] == my_username:
-                print(f'\nReceived message from user {message[SENDER]}:'
-                      f'\n{message[MESSAGE_TEXT]}')
-                CLIENT_LOGGER.info(f'Received message from user {message[SENDER]}:'
-                                   f'\n{message[MESSAGE_TEXT]}')
+            send_message(self.sock, message_dict)
+            CLIENT_LOGGER.info(f'Message has send to: {to}')
+        except:
+            CLIENT_LOGGER.critical('Connection failed')
+            exit(1)
+
+    # User communicate function.
+    # The function request commands and send messages.
+    def run(self):
+        self.print_help()
+        while True:
+            command = input('Input command: ')
+            if command == 'message':
+                self.create_message()
+            elif command == 'help':
+                self.print_help()
+            elif command == 'exit':
+                try:
+                    send_message(self.sock, self.create_exit_message())
+                except:
+                    pass
+                print('Connection close')
+                CLIENT_LOGGER.info('Finished by user')
+                # Necessary delay
+                time.sleep(0.5)
+                break
             else:
-                CLIENT_LOGGER.error(f'Received incorrect server from server: {message}')
-        except IncorrectDataReceivedError:
-            CLIENT_LOGGER.error(f'Decoding message failed')
-        except (OSError, ConnectionError, ConnectionAbortedError,
-                ConnectionResetError, json.JSONDecodeError):
-            CLIENT_LOGGER.critical(f'Server connection lost')
-            break
+                print('Unknown command, please try again. Help - for help.')
+
+    # Helper function
+    def print_help(self):
+        print('Supported commands: ')
+        print('message: send message')
+        print('help: to print hints')
+        print('exit: to exit')
 
 
-@Log(CLIENT_LOGGER)
-def create_message(sock, account_name='Guest'):
-    """
-    The function ask message text and return it
-    :param sock:
-    :param account_name:
-    """
-    to_user = input('Input the recipient of the message: ')
-    message = input('Input the message for send')
-    message_dict = {
-        ACTION: MESSAGE,
-        SENDER: account_name,
-        DESTINATION: to_user,
-        TIME: time.time(),
-        MESSAGE_TEXT: message
-    }
-    CLIENT_LOGGER.debug(f'Messages dictionary has formed: {message_dict}')
-    try:
-        send_message(sock, message_dict)
-        CLIENT_LOGGER.info(f'Message to user {to_user} has sent')
-    except Exception as e:
-        print(e)
-        CLIENT_LOGGER.critical('Server connection has lost')
-        sys.exit(1)
+# The class for receive a message from the server.
+# The class receive message and print to console.
+class ClientReader(threading.Thread):
+    def __init__(self, account_name, sock):
+        self.account_name = account_name
+        self.sock = sock
+        super().__init__()
+
+    # Main class loop, receive messages and print to console.
+    # if connection is down, exit.
+    def run(self):
+        while True:
+            try:
+                message = get_message(self.sock)
+                if ACTION in message and message[ACTION] == MESSAGE and SENDER in message and DESTINATION in message \
+                        and MESSAGE_TEXT in message and message[DESTINATION] == self.account_name:
+                    print(f'\nReceive user message {message[SENDER]}:\n{message[MESSAGE_TEXT]}')
+                    CLIENT_LOGGER.info(
+                        f'Receive user message {message[SENDER]}:\n{message[MESSAGE_TEXT]}')
+                else:
+                    CLIENT_LOGGER.error(f'Receive incorrect message from server: {message}')
+            except IncorrectDataReceivedError:
+                CLIENT_LOGGER.error(f'Decoding failed')
+            except (OSError, ConnectionError, ConnectionAbortedError, ConnectionResetError, json.JSONDecodeError):
+                CLIENT_LOGGER.critical(f'Connection is down')
+                break
 
 
-@Log(CLIENT_LOGGER)
-def user_interactive(sock, username):
-    """
-    The function for communication with user
-    :param sock:
-    :param username:
-    """
-    while True:
-        command = input('Input the command: ')
-        if command == 'message':
-            create_message(sock, username)
-        elif command == 'help':
-            print_help()
-        elif command == 'exit':
-            send_message(sock, create_exit_message(username))
-            print('Connection is closing...')
-            CLIENT_LOGGER.info('Connection is closing by user...')
-            # Delay need to send message about exit
-            time.sleep(0.5)
-            break
-        else:
-            print('Unknown command, please try again')
-
-
+# The function generate a client presence request
 @Log(CLIENT_LOGGER)
 def create_presence(account_name):
-    """
-    The function generates a client presence request
-    :param account_name:
-    :return:
-    """
     out = {
         ACTION: PRESENCE,
         TIME: time.time(),
@@ -124,117 +121,97 @@ def create_presence(account_name):
             ACCOUNT_NAME: account_name
         }
     }
-    CLIENT_LOGGER.debug(f'{PRESENCE} message for user {account_name}')
+    CLIENT_LOGGER.debug(f'Formed {PRESENCE} message for user {account_name}')
     return out
 
 
-def print_help():
-    """
-    The function print help
-    """
-    print('Supported commands: ')
-    print('message - send message')
-    print('help - print hints for commands')
-    print('exit - exit from program')
-
-
+# The function parse server response, return 200 if OK or generate exception
 @Log(CLIENT_LOGGER)
 def process_response_ans(message):
-    """
-    The function parses the server response
-    return 200 if all is OK or generated exception
-    :param message:
-    :return:
-    """
-    CLIENT_LOGGER.debug(f'Parse greeting message from server: {message}')
+    CLIENT_LOGGER.debug(f'Parse server greeting message: {message}')
     if RESPONSE in message:
         if message[RESPONSE] == 200:
             return '200 : OK'
         elif message[RESPONSE] == 400:
-            raise ServerError(f'400: {message[ERROR]}')
+            raise ServerError(f'400 : {message[ERROR]}')
     raise ReqFieldMissingError(RESPONSE)
 
 
+# Args command prompt parser
 @Log(CLIENT_LOGGER)
 def arg_parser():
-    """
-    Create a command line argument parser
-    :return server_address, server_port, client_mode:
-    """
     parser = argparse.ArgumentParser()
     parser.add_argument('addr', default=DEFAULT_IP_ADDRESS, nargs='?')
     parser.add_argument('port', default=DEFAULT_PORT, type=int, nargs='?')
-    parser.add_argument('-m', '--mode', default='listen', nargs='?')
+    parser.add_argument('-n', '--name', default=None, nargs='?')
     namespace = parser.parse_args(sys.argv[1:])
     server_address = namespace.addr
     server_port = namespace.port
-    client_mode = namespace.mode
+    client_name = namespace.name
 
-    # Check port number
+    # check port number
     if not 1023 < server_port < 65536:
         CLIENT_LOGGER.critical(
-            f'Wrong port: {server_port}. Range must be from 1024 to 65535.')
-        sys.exit(1)
+            f'Bad client port: {server_port}. Valid address range from 1024 to 65535. Client exit.')
+        exit(1)
 
-    CLIENT_LOGGER.info(f'Client started with server address: {server_address}, port: {server_port}')
-
-    # Check selected mode
-    if client_mode not in ('listen', 'send'):
-        CLIENT_LOGGER.critical(f'Invalid mode {client_mode}, valid modes is listen, send')
-        sys.exit(1)
-
-    return server_address, server_port, client_mode
+    return server_address, server_port, client_name
 
 
 def main():
-    """
-    The main function
-    """
-    # Loading command line options
+    # Run alert
+    print('Console messanger. Client module.')
+
+    # download command prompt parameters
     server_address, server_port, client_name = arg_parser()
 
-    # Starting alert
-    print(f'Messanger. Client module. Client name: {client_name}')
-
-    # if not client name, ask for client name
+    # Request username if not set
     if not client_name:
-        client_name = input('Input the client name: ')
+        client_name = input('Input user name: ')
+    else:
+        print(f'Client module has started with name: {client_name}')
 
-    CLIENT_LOGGER.info(f'Started client with params: adr: {server_address} | port: {server_port} | name: {client_name}')
-    # Initial socket
+    CLIENT_LOGGER.info(
+        f'Client has started with ports: server address: {server_address} , '
+        f'port: {server_port}, user name: {client_name}')
+
+    # Sock initial
     try:
         transport = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         transport.connect((server_address, server_port))
-        send_message(transport, create_message(client_name))
+        send_message(transport, create_presence(client_name))
         answer = process_response_ans(get_message(transport))
-        CLIENT_LOGGER.info(f'Connection done. Server response {answer}')
-        print('Connection done')
+        CLIENT_LOGGER.info(f'Connection up. Server response: {answer}')
+        print(f'Server connection up.')
     except json.JSONDecodeError:
-        CLIENT_LOGGER.error('Decoding JSON string has failed')
-        sys.exit(1)
+        CLIENT_LOGGER.error('JSON string parse failed')
+        exit(1)
     except ServerError as error:
-        CLIENT_LOGGER.error(f'Error connection to server: {error.text}')
-        sys.exit(1)
+        CLIENT_LOGGER.error(f'Connection server error: {error.text}')
+        exit(1)
     except ReqFieldMissingError as missing_error:
         CLIENT_LOGGER.error(f'Miss field {missing_error.missing_field}')
-        sys.exit(1)
-    except ConnectionRefusedError:
-        CLIENT_LOGGER.critical(f'Server out {server_address}:{server_port}')
-        sys.exit(1)
+        exit(1)
+    except (ConnectionRefusedError, ConnectionError):
+        CLIENT_LOGGER.critical(
+            f'Server connection failed {server_address}:{server_port}')
+        exit(1)
     else:
-        # Start client process if connection is OK
-        receiver = threading.Thread(target=message_from_server, args=(transport, client_name), daemon=True)
-        receiver.start()
+        # If connection is correct, start client receive message process
+        module_receiver = ClientReader(client_name, transport)
+        module_receiver.daemon = True
+        module_receiver.start()
 
-        # Start sending messages
-        user_interface = threading.Thread(target=user_interactive, args=(transport, client_name), daemon=True)
-        user_interface.start()
-        CLIENT_LOGGER.debug('Processes has started')
+        # start client interaction
+        module_sender = ClientSender(client_name, transport)
+        module_sender.daemon = True
+        module_sender.start()
+        CLIENT_LOGGER.debug('Process started')
 
-        # Watchdog is main loop, if one of threads has finished connection closed/lost
+        # Watchdog - main loop, if thread down break loop
         while True:
             time.sleep(1)
-            if receiver.is_alive() and user_interface.is_alive():
+            if module_receiver.is_alive() and module_sender.is_alive():
                 continue
             break
 
