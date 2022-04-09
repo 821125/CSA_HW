@@ -4,9 +4,10 @@ from pprint import pprint
 
 class ServerMaker(type):
     def __init__(cls, clsname, bases, clsdict):
+
         methods = []
-        methods_2 = []
-        attrs = []
+        methods_2 = []  # получаем с помощью 'LOAD_METHOD'
+        attrs = []  # получаем с помощью 'LOAD_ATTR'
 
         for func in clsdict:
             try:
@@ -25,18 +26,18 @@ class ServerMaker(type):
                     elif i.opname == 'LOAD_ATTR':
                         if i.argval not in attrs:
                             attrs.append(i.argval)
-            print(20 * '-', 'methods', 20 * '-')
-            pprint(methods)
-            print(20 * '-', 'methods_2', 20 * '-')
-            pprint(methods_2)
-            print(20 * '-', 'attrs', 20 * '-')
-            pprint(attrs)
-            print(50 * '-')
-            if 'connect' in methods:
-                raise TypeError('Method connect is forbidden in server class')
-            if not ('SOCK_STREAM' in attrs and 'AF_INET' in attrs):
-                raise TypeError('Socket initialization is incorrect.')
-            super().__init__(clsname, bases, clsdict)
+        print(20 * '-', 'methods', 20 * '-')
+        pprint(methods)
+        print(20 * '-', 'methods_2', 20 * '-')
+        pprint(methods_2)
+        print(20 * '-', 'attrs', 20 * '-')
+        pprint(attrs)
+        print(50 * '-')
+        if 'connect' in methods:
+            raise TypeError('Использование метода connect недопустимо в серверном классе')
+        if not ('SOCK_STREAM' in attrs and 'AF_INET' in attrs):
+            raise TypeError('Некорректная инициализация сокета.')
+        super().__init__(clsname, bases, clsdict)
 
 
 class ClientMaker(type):

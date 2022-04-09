@@ -27,7 +27,7 @@ def arg_parser():
 
 
 # Main server class
-class Server(metaclasses=ServerMaker):
+class Server(metaclass=ServerMaker):
     port = Port()
 
     def __init__(self, listen_address, listen_port):
