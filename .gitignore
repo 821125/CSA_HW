@@ -1,4 +1,6 @@
 .idea
 __pycache__
+venv
 client.log
 server.log
+*.db3
