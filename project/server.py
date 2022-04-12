@@ -1,96 +1,177 @@
 """Server"""
 
 import socket
-import sys
 import argparse
-import json
-import logging
+import select
 import logs.config_server_log
-from errors import IncorrectDataReceivedError
-from common.variables import ACTION, ACCOUNT_NAME, RESPONSE, MAX_CONNECTIONS, \
-    PRESENCE, TIME, USER, ERROR, DEFAULT_PORT
-from common.utils import get_message, send_message
+from common.variables import *
+from common.utils import *
 from decos import Log
+from descriptors import Port
+from metaclasses import ServerMaker
 
 # Server logging initialization.
-SERVER_LOGGER = logging.getLogger('server')
+SERVER_LOGGER = logging.getLogger('server_dist')
 
 
 @Log(SERVER_LOGGER)
-def process_client_message(message):
-    """
-    Message handler from clients, takes a dictionary -
-    a message from the clint, checks the correctness,
-    returns a response dictionary for the client
-    :param message:
-    :return:
-    """
-    SERVER_LOGGER.debug(f'Parsing clients message: {message}')
-    if ACTION in message and message[ACTION] == PRESENCE and TIME in message \
-            and USER in message and message[USER][ACCOUNT_NAME] == 'Guest':
-        return {RESPONSE: 200}
-    return {
-        RESPONSE: 400,
-        ERROR: 'Bad Request'
-    }
-
-
-@Log(SERVER_LOGGER)
-def create_arg_parser():
-    """
-    Command Line Argument Parser
-    :return:
-    """
+# Args command prompt parser
+def arg_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', default=DEFAULT_PORT, type=int, nargs='?')
     parser.add_argument('-a', default='', nargs='?')
-    return parser
-
-
-def main():
-    """
-    Loading command line parameters, if there are no parameters, then set the default values.
-    First we process the port:
-    server.py -p 8888 -a 127.0.0.1
-    :return:
-    """
-    parser = create_arg_parser()
     namespace = parser.parse_args(sys.argv[1:])
     listen_address = namespace.a
     listen_port = namespace.p
+    return listen_address, listen_port
 
-    # Port checking
-    if not 1024 < listen_port < 65536:
-        SERVER_LOGGER.critical(f'Try start with port: {listen_port}. Port range must be from 1024 to 65535.')
-        sys.exit(1)
-    SERVER_LOGGER.info(f'Listen port: {listen_port}, Listen address: {listen_address}.')
 
-    # Preparing socket
-    transport = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    transport.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    transport.bind((listen_address, listen_port))
+# Main server class
+class Server(metaclass=ServerMaker):
+    port = Port()
 
-    # Port listening
-    transport.listen(MAX_CONNECTIONS)
+    def __init__(self, listen_address, listen_port):
+        # connection param
+        self.addr = listen_address
+        self.port = listen_port
 
-    while True:
-        client, client_address = transport.accept()
-        SERVER_LOGGER.info(f'Connection with PC {client_address}')
-        try:
-            message_from_client = get_message(client)
-            SERVER_LOGGER.debug(f'Got message {message_from_client}')
-            print(message_from_client)
-            response = process_client_message(message_from_client)
-            SERVER_LOGGER.info(f'Report to client: {response}')
+        # connection client list
+        self.clients = []
+
+        # sending messages list
+        self.messages = []
+
+        # name-sock dictionary
+        self.names = dict()
+
+    def init_socket(self):
+        SERVER_LOGGER.info(
+            f'Server up, port: {self.port}, '
+            f'connection address: {self.addr}. ')
+
+        # Prepare socket
+        transport = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        transport.bind((self.addr, self.port))
+        transport.settimeout(0.5)
+
+        # Socket listening
+        self.sock = transport
+        self.sock.listen()
+
+    def main_loop(self):
+
+        # Socket initialization
+        self.init_socket()
+
+        # Server main loop
+        while True:
+            # Awaiting connection, it timeout - exception.
+            try:
+                client, client_address = self.sock.accept()
+            except OSError:
+                pass
+            else:
+                SERVER_LOGGER.info(f'PC connection is up {client_address}')
+                self.clients.append(client)
+
+            recv_data_lst = []
+            send_data_lst = []
+            err_lst = []
+
+            # Check awaiting clients
+            try:
+                if self.clients:
+                    recv_data_lst, send_data_lst, err_lst = select.select(self.clients, self.clients, [], 0)
+            except OSError:
+                pass
+
+            # Receive message. Exception if error.
+            if recv_data_lst:
+                for client_with_message in recv_data_lst:
+                    try:
+                        self.process_client_message(get_message(client_with_message), client_with_message)
+                    except:
+                        SERVER_LOGGER.info(f'Client {client_with_message.getpeername()} has disconnected.')
+                        self.clients.remove(client_with_message)
+
+            # If message then process
+            for message in self.messages:
+                try:
+                    self.process_message(message, send_data_lst)
+                except Exception as e:
+                    SERVER_LOGGER.info(f'Connection with '
+                                       f'{message[DESTINATION]} has lost, '
+                                       f' error {e}')
+                    self.clients.remove(self.names[message[DESTINATION]])
+                    del self.names[message[DESTINATION]]
+            self.messages.clear()
+
+    # The function send message to client
+    # Receive dictionary
+    # Return nothing
+    def process_message(self, message, listen_socks):
+        if message[DESTINATION] in self.names and \
+                self.names[message[DESTINATION]] in listen_socks:
+            send_message(self.names[message[DESTINATION]], message)
+            SERVER_LOGGER.info(f'Message to user has sent {message[DESTINATION]} '
+                               f'from user {message[SENDER]}.')
+        elif message[DESTINATION] in self.names \
+                and self.names[message[DESTINATION]] not in listen_socks:
+            raise ConnectionError
+        else:
+            SERVER_LOGGER.error(
+                f'User {message[DESTINATION]} not registered.')
+
+    # Client messages parser, receive dictionary - message from client,
+    # check, send dictionary-answer.
+    def process_client_message(self, message, client):
+        SERVER_LOGGER.debug(f'Client message parser : {message}')
+        # If this is a presence message, accept and respond
+        if ACTION in message and message[ACTION] == PRESENCE \
+                and TIME in message and USER in message:
+            # If not registered -> register else send response
+            if message[USER][ACCOUNT_NAME] not in self.names.keys():
+                self.names[message[USER][ACCOUNT_NAME]] = client
+                send_message(client, RESPONSE_200)
+            else:
+                response = RESPONSE_400
+                response[ERROR] = 'Username already taken '
+                send_message(client, response)
+                self.clients.remove(client)
+                client.close()
+            return
+        # If message then add to queue. No answer required.
+        elif ACTION in message \
+                and message[ACTION] == MESSAGE \
+                and DESTINATION in message \
+                and TIME in message \
+                and SENDER in message \
+                and MESSAGE_TEXT in message:
+            self.messages.append(message)
+            return
+        # If client exit
+        elif ACTION in message \
+                and message[ACTION] == EXIT \
+                and ACCOUNT_NAME in message:
+            self.clients.remove(self.names[ACCOUNT_NAME])
+            self.names[ACCOUNT_NAME].close()
+            del self.names[ACCOUNT_NAME]
+            return
+        # otherwise, Bad request
+        else:
+            response = RESPONSE_400
+            response[ERROR] = 'bad response'
             send_message(client, response)
-            SERVER_LOGGER.debug(f'Connection to {client_address}')
-            client.close()
-        except json.JSONDecodeError:
-            SERVER_LOGGER.error(f'Bad JSON client data: {client_address}.')
-            client.close()
-        except IncorrectDataReceivedError:
-            SERVER_LOGGER.error(f'Bad data from client {client_address}.')
-            client.close()
+            return
+
+
+def main():
+    # Loading params of command prompt if not then set default.
+    listen_address, listen_port = arg_parser()
+
+    # Create an instance of a class.
+    server = Server(listen_address, listen_port)
+    server.main_loop()
 
 
 if __name__ == '__main__':
