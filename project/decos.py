@@ -24,7 +24,6 @@ class Log:
     def __init__(self, logger=None):
         """
         LOGGER = logging.getLogger('client')
-
         """
         self.logger = logger
 
@@ -41,22 +40,22 @@ class Log:
                 logger_name = module_name.replace('.py', '')
                 self.logger = logging.getLogger(logger_name)
 
-            # create Class instance for new filter and add it to current logger
-            new_filter = LogFilter()
-            self.logger.addFilter(new_filter)
-            print('List of filters after adding new_filter: ', self.logger.filters)
-
-            # Message where <function> write as "fUnction" will be filtered
-            self.logger.debug(f'fUnction {func.__name__} called from function {parent_func_name} '
-                              f'in module {module_name} with arguments: {args}; {kwargs}')
-
-            # Message where <function> write as "Function" won't be filtered
-            self.logger.debug(f'Function {func.__name__} called from function {parent_func_name} '
-                              f'in module {module_name} with arguments: {args}; {kwargs}')
-
-            # Delete filter
-            self.logger.filters.remove(new_filter)
-            print('List of filters after removing new_filter: ', self.logger.filters)
+            # # create Class instance for new filter and add it to current logger
+            # new_filter = LogFilter()
+            # self.logger.addFilter(new_filter)
+            # print('List of filters after adding new_filter: ', self.logger.filters)
+            #
+            # # Message where <function> write as "fUnction" will be filtered
+            # self.logger.debug(f'fUnction {func.__name__} called from function {parent_func_name} '
+            #                   f'in module {module_name} with arguments: {args}; {kwargs}')
+            #
+            # # Message where <function> write as "Function" won't be filtered
+            # self.logger.debug(f'Function {func.__name__} called from function {parent_func_name} '
+            #                   f'in module {module_name} with arguments: {args}; {kwargs}')
+            #
+            # # Delete filter
+            # self.logger.filters.remove(new_filter)
+            # print('List of filters after removing new_filter: ', self.logger.filters)
 
             result = func(*args, **kwargs)
             return result
