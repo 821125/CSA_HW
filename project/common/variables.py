@@ -15,7 +15,7 @@ ENCODING = 'utf-8'
 # Current logging level
 LOGGING_LEVEL = logging.DEBUG
 # Database (server)
-SERVER_DATABASE = 'sqlite:///server_base.db3'
+SERVER_CONFIG = 'server_dist.ini'
 
 # Protocol JIM main keys:
 ACTION = 'action'
@@ -32,10 +32,19 @@ ERROR = 'error'
 MESSAGE = 'message'
 MESSAGE_TEXT = 'mess_text'
 EXIT = 'exit'
+GET_CONTACTS = 'get_contacts'
+LIST_INFO = 'data_list'
+REMOVE_CONTACT = 'remove'
+ADD_CONTACT = 'add'
+USERS_REQUEST = 'get_users'
 
 # Dictionaries - response:
 # 200
 RESPONSE_200 = {RESPONSE: 200}
+# 202
+RESPONSE_202 = {RESPONSE: 202,
+                LIST_INFO:None
+                }
 # 400
 RESPONSE_400 = {
     RESPONSE: 400,
