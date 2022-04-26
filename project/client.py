@@ -1,97 +1,101 @@
 """Client"""
 
-import sys
-import json
-import socket
-import time
-import argparse
 import logging
 import logs.config_client_log
-from common.variables import ACTION, TIME, USER, ACCOUNT_NAME, RESPONSE, \
-    DEFAULT_IP_ADDRESS, DEFAULT_PORT, ERROR, PRESENCE
-from common.utils import get_message, send_message
-from errors import ReqFieldMissingError
-from decos import Log
+import argparse
+import sys
+import os
+from Cryptodome.PublicKey import RSA
+from PyQt5.QtWidgets import QApplication, QMessageBox
 
-# Initial client logger
-CLIENT_LOGGER = logging.getLogger('client')
+from common.variables import *
+from common.errors import ServerError
+from common.decos import log
+from client.database import ClientDatabase
+from client.transport import ClientTransport
+from client.main_window import ClientMainWindow
+from client.start_dialog import UserNameDialog
 
-
-@Log(CLIENT_LOGGER)
-def create_presence(account_name='Guest'):
-    """
-    The function generates a client presence request
-    :param account_name:
-    :return:
-    """
-    out = {
-        ACTION: PRESENCE,
-        TIME: time.time(),
-        USER: {
-            ACCOUNT_NAME: account_name
-        }
-    }
-    CLIENT_LOGGER.debug(f'{PRESENCE} message for user {account_name}')
-    return out
+# Initial clients logger
+CLIENT_LOGGER = logging.getLogger('client_dist')
 
 
-@Log(CLIENT_LOGGER)
-def process_ans(message):
-    """
-    The function parses the server response
-    :param message:
-    :return:
-    """
-    if RESPONSE in message:
-        if message[RESPONSE] == 200:
-            return '200 : OK'
-        return f'400 : {message[ERROR]}'
-    raise ReqFieldMissingError(RESPONSE)
-
-
-@Log(CLIENT_LOGGER)
-def create_arg_parser():
-    """
-    Create a command line argument parser
-    :return:
-    """
+@log
+def arg_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('addr', default=DEFAULT_IP_ADDRESS, nargs='?')
     parser.add_argument('port', default=DEFAULT_PORT, type=int, nargs='?')
-    return parser
-
-
-def main():
-    """Loading command line options"""
-    parser = create_arg_parser()
+    parser.add_argument('-n', '--name', default=None, nargs='?')
+    parser.add_argument('-p', '--password', default='', nargs='?')
     namespace = parser.parse_args(sys.argv[1:])
     server_address = namespace.addr
     server_port = namespace.port
+    client_name = namespace.name
+    client_passwd = namespace.password
 
-    # Check port number
     if not 1023 < server_port < 65536:
         CLIENT_LOGGER.critical(
-            f'Wrong port: {server_port}. Range must be from 1024 to 65535.')
-        sys.exit(1)
+            f'Bad port number: {server_port}. '
+            f'Valid address from 1024 to 65535.')
+        exit(1)
 
-    CLIENT_LOGGER.info(f'Client started with server address: {server_address}, port: {server_port}')
-
-    # Initial socket
-    try:
-        transport = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        transport.connect((server_address, server_port))
-        message_to_server = create_presence()
-        send_message(transport, message_to_server)
-        answer = process_ans(get_message(transport))
-        CLIENT_LOGGER.info(f'Server response {answer}')
-        print(answer)
-    except json.JSONDecodeError:
-        CLIENT_LOGGER.error('Bad JSON data')
-    except ReqFieldMissingError as missing_error:
-        CLIENT_LOGGER.error(f'Miss field {missing_error.missing_field}')
-    except ConnectionRefusedError:
-        CLIENT_LOGGER.critical(f'Server out {server_address}:{server_port}')
+    return server_address, server_port, client_name, client_passwd
 
 
 if __name__ == '__main__':
-    main()
+    server_address, server_port, client_name, client_passwd = arg_parser()
+    CLIENT_LOGGER.debug('Args loaded')
+
+    client_app = QApplication(sys.argv)
+
+    start_dialog = UserNameDialog()
+    if not client_name or not client_passwd:
+        client_app.exec_()
+        if start_dialog.ok_pressed:
+            client_name = start_dialog.client_name.text()
+            client_passwd = start_dialog.client_passwd.text()
+            CLIENT_LOGGER.debug(f'Using USERNAME = {client_name}, PASSWD = {client_passwd}.')
+        else:
+            exit(0)
+
+    CLIENT_LOGGER.info(
+        f'Run client: {server_address} , port: {server_port},'
+        f' user name: {client_name}')
+
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    key_file = os.path.join(dir_path, f'{client_name}.key')
+    if not os.path.exists(key_file):
+        keys = RSA.generate(2048, os.urandom)
+        with open(key_file, 'wb') as key:
+            key.write(keys.export_key())
+    else:
+        with open(key_file, 'rb') as key:
+            keys = RSA.import_key(key.read())
+
+    CLIENT_LOGGER.debug("Keys successfully loaded.")
+    database = ClientDatabase(client_name)
+    try:
+        transport = ClientTransport(
+            server_port,
+            server_address,
+            database,
+            client_name,
+            client_passwd,
+            keys)
+        CLIENT_LOGGER.debug("Transport ready.")
+    except ServerError as error:
+        message = QMessageBox()
+        message.critical(start_dialog, 'Server error', error.text)
+        exit(1)
+    transport.setDaemon(True)
+    transport.start()
+
+    del start_dialog
+
+    main_window = ClientMainWindow(database, transport, keys)
+    main_window.make_connection(transport)
+    main_window.setWindowTitle(f'Chat program alpha release - {client_name}')
+    client_app.exec_()
+
+    transport.transport_shutdown()
+    transport.join()
