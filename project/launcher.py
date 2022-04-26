@@ -13,6 +13,9 @@ while True:
         clients_count = int(input('Input number of clients: '))
         # Run server
         PROCESS.append(subprocess.Popen('python server_script.py.py', creationflags=subprocess.CREATE_NEW_CONSOLE))
+    elif ACTION == 'k':
+        print('Check users with password: 123456. They should be enough')
+        clients_count = int(input('Input number of test clients: '))
         # Run clients
         for i in range(clients_count):
             PROCESS.append(subprocess.Popen(f'python client.py -n test{i + 1}',
